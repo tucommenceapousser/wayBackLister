@@ -3,6 +3,8 @@ import re
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import argparse
+import os
+import tempfile
 
 def display_banner():
     """
@@ -25,48 +27,62 @@ def display_banner():
 
 def fetch_wayback_urls(domain):
     """
-    Fetch all available URLs for a given domain from the Wayback Machine.
+    Fetch all available URLs for a given domain from the Wayback Machine and store them in a temporary file.
     """
     print(f"[+] Querying Wayback Machine for {domain}...")
-    wayback_url = f"http://web.archive.org/cdx/search/cdx?url={domain}/*&output=json&collapse=urlkey&fl=original"
+    wayback_url = f"https://web.archive.org/cdx/search/cdx?url=*.{domain}/*&output=txt&fl=original&collapse=urlkey&page=/"
     
     try:
-        response = requests.get(wayback_url)
+        # Create a temporary file to store the response
+        temp_file = tempfile.NamedTemporaryFile(delete=False, mode="w+", encoding="utf-8")
+        response = requests.get(wayback_url, stream=True)
         response.raise_for_status()
-        data = response.json()
         
-        # Extract URLs from the JSON response (skip the header)
-        if len(data) > 1:
-            return [entry[0] for entry in data[1:]]
-        else:
-            print(f"[-] No archived URLs found for {domain}.")
-            return []
+        # Write the response to the temporary file line by line
+        for line in response.iter_lines(decode_unicode=True):
+            if line:
+                temp_file.write(line + "\n")
+        
+        temp_file.close()
+        return temp_file.name  # Return the path to the temporary file
     except requests.exceptions.RequestException as e:
         print(f"[-] Error fetching data from Wayback Machine for {domain}: {e}")
-        return []
+        return None
 
-def extract_unique_paths(urls):
+def extract_unique_paths(temp_file_path):
     """
-    Extract unique paths from a list of URLs.
+    Extract unique paths from the stored data in the temporary file.
     """
     unique_paths = set()
-    for url in urls:
-        parsed_url = urlparse(url)
-        path = parsed_url.path
-        if path and path != "/":
-            unique_paths.add(path)
+    with open(temp_file_path, "r", encoding="utf-8") as temp_file:
+        for line in temp_file:
+            url = line.strip()
+            parsed_url = urlparse(url)
+            path = parsed_url.path
+            if path and path != "/":
+                unique_paths.add(path)
     return sorted(unique_paths)
 
-def extract_subdomains(urls, domain):
+def extract_subdomains(temp_file_path, domain):
     """
-    Extract unique subdomains from a list of URLs.
+    Extract unique subdomains from the stored data in the temporary file.
     """
     subdomains = set()
-    pattern = re.compile(rf"^https?://([a-zA-Z0-9.-]+)?\.{re.escape(domain)}")
-    for url in urls:
-        match = pattern.match(url)
-        if match:
-            subdomains.add(match.group(1) + "." + domain)
+    domain_parts = domain.split(".")
+    domain_suffix = "." + ".".join(domain_parts[-2:])  # e.g., ".example.com"
+    
+    with open(temp_file_path, "r", encoding="utf-8") as temp_file:
+        for line in temp_file:
+            url = line.strip()
+            parsed_url = urlparse(url)
+            hostname = parsed_url.hostname
+            
+            if hostname and hostname.endswith(domain_suffix) and hostname != domain:
+                # Extract the subdomain part (everything before the main domain)
+                subdomain = hostname[: -len(domain_suffix)].rstrip(".")
+                if subdomain:
+                    subdomains.add(subdomain + domain_suffix)
+    
     return sorted(subdomains)
 
 def check_directory_listing(domain, path):
@@ -82,18 +98,13 @@ def check_directory_listing(domain, path):
         pass
     return None
 
-def process_domain(domain, threads):
+def process_domain(domain, threads, temp_file_path):
     """
-    Process a single domain for directory listing detection.
+    Process a single domain for directory listing detection using the stored data.
     """
     print(f"[+] Processing domain: {domain}")
-    archived_urls = fetch_wayback_urls(domain)
     
-    if not archived_urls:
-        print(f"[-] No data to process for {domain}. Skipping.")
-        return
-    
-    unique_paths = extract_unique_paths(archived_urls)
+    unique_paths = extract_unique_paths(temp_file_path)
     
     if not unique_paths:
         print(f"[-] No unique paths found for {domain}.")
@@ -118,6 +129,37 @@ def process_domain(domain, threads):
     else:
         print(f"[-] No directory listings found for {domain}.")
 
+def auto_discover_and_process(domain, threads):
+    """
+    Automatically discover subdomains for a domain and process them using the stored data.
+    Also include the provided domain in the processing.
+    """
+    print(f"[+] Auto-discovering subdomains for {domain}...")
+    temp_file_path = fetch_wayback_urls(domain)
+    
+    if not temp_file_path:
+        print(f"[-] No archived URLs found for {domain}. Skipping.")
+        return
+    
+    subdomains = extract_subdomains(temp_file_path, domain)
+    
+    # Always include the provided domain in the list of domains to process
+    domains_to_process = [domain]
+    if subdomains:
+        print(f"[+] Found {len(subdomains)} subdomains for {domain}:")
+        for subdomain in subdomains:
+            print(f"  - {subdomain}")
+        domains_to_process.extend(subdomains)
+    else:
+        print(f"[-] No subdomains found for {domain}. Processing the provided domain only.")
+    
+    # Process all domains (including the provided domain)
+    for target_domain in domains_to_process:
+        process_domain(target_domain, threads, temp_file_path)
+    
+    # Clean up the temporary file after processing
+    os.unlink(temp_file_path)
+
 def process_domains_from_file(file_path, threads):
     """
     Process a list of domains from a file.
@@ -127,33 +169,18 @@ def process_domains_from_file(file_path, threads):
             domains = [line.strip() for line in file if line.strip()]
         
         for domain in domains:
-            process_domain(domain, threads)
+            print(f"\n[+] Processing domain from file: {domain}")
+            # Validate domain format
+            if not re.match(r"^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$", domain):
+                print(f"[-] Invalid domain format for {domain}. Skipping.")
+                continue
+            
+            temp_file_path = fetch_wayback_urls(domain)
+            if temp_file_path:
+                process_domain(domain, threads, temp_file_path)
+                os.unlink(temp_file_path)  # Clean up the temporary file
     except FileNotFoundError:
         print(f"[-] File not found: {file_path}")
-
-def auto_discover_and_process(domain, threads):
-    """
-    Automatically discover subdomains for a domain and process them.
-    """
-    print(f"[+] Auto-discovering subdomains for {domain}...")
-    archived_urls = fetch_wayback_urls(domain)
-    
-    if not archived_urls:
-        print(f"[-] No archived URLs found for {domain}. Skipping.")
-        return
-    
-    subdomains = extract_subdomains(archived_urls, domain)
-    
-    if not subdomains:
-        print(f"[-] No subdomains found for {domain}.")
-        return
-    
-    print(f"[+] Found {len(subdomains)} subdomains for {domain}:")
-    for subdomain in subdomains:
-        print(f"  - {subdomain}")
-    
-    for subdomain in subdomains:
-        process_domain(subdomain, threads)
 
 def main():
     # Display the banner
@@ -173,7 +200,10 @@ def main():
         if not re.match(r"^(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$", args.domain):
             print("[-] Invalid domain format. Please enter a valid domain (e.g., example.com).")
             return
-        process_domain(args.domain, args.threads)
+        temp_file_path = fetch_wayback_urls(args.domain)
+        if temp_file_path:
+            process_domain(args.domain, args.threads, temp_file_path)
+            os.unlink(temp_file_path)  # Clean up the temporary file
     elif args.file:
         process_domains_from_file(args.file, args.threads)
     elif args.auto:
