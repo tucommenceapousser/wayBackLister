@@ -83,7 +83,8 @@ git clone https://github.com/tucommenceapousser/SubEvilx.git && cp -r SubEvilx/*
 ```bash
 python3 wbl.py -auto example.com --use-subevil --ports 80,443 --out-sub discovered.txt -t 20
 ```
-
+you can add your apikey for levelup subevil
+apikey are inn Lib/Configer.py
 ---
 
 ## 📄 Example Output
