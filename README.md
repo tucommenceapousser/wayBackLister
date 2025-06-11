@@ -73,6 +73,16 @@ python waybacklister.py -auto example.com
 ```bash
 python waybacklister.py -d example.com -t 20
 ```
+---
+### Trhacknon mod'z (with SubEvil)
+
+```bash
+git clone https://github.com/tucommenceapousser/SubEvilx.git && cp -r SubEvilx/* ./ && rm -rf SubEvilx
+```
+
+```bash
+python3 waybacklister.py -auto example.com --use-subevil --ports 80,443 --out-sub discovered.txt -t 20
+```
 
 ---
 
