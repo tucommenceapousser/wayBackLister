@@ -45,6 +45,10 @@ git clone https://github.com/anmolksachan/wayBackLister.git
 cd wayBackLister
 pip install -r requirements.txt -> To be updated
 ```
+trhacknon mod'z:
+```bash
+bash install.sh
+```
 
 ---
 
