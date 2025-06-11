@@ -1,7 +1,7 @@
 
 ---
 
-# WaybackLister v1.0
+# WaybackLister v2.0
 
 ```
  __          __         _                _    _      _     _            
@@ -41,7 +41,7 @@ WaybackLister is a reconnaissance tool that taps into the Wayback Machine to fet
 Clone the repo and you're good to go:
 
 ```bash
-git clone https://github.com/anmolksachan/wayBackLister.git
+git clone https://github.com/tucommenceapousser/wayBackLister.git
 cd wayBackLister
 pip install -r requirements.txt -> To be updated
 ```
