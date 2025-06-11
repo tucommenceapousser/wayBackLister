@@ -81,7 +81,7 @@ git clone https://github.com/tucommenceapousser/SubEvilx.git && cp -r SubEvilx/*
 ```
 
 ```bash
-python3 waybacklister.py -auto example.com --use-subevil --ports 80,443 --out-sub discovered.txt -t 20
+python3 wbl.py -auto example.com --use-subevil --ports 80,443 --out-sub discovered.txt -t 20
 ```
 
 ---
