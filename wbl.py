@@ -85,18 +85,18 @@ def get_subevil_subdomains(domain, port_scan=None):
 
 def check_directory_listing(domain, path):
     patterns = [
-        "Index of /", "Directory Listing for", "<title>Index of",
-        "Parent Directory</a>", "Name</a>", "Size</a>"
+        "Index of", "Directory Listing", "<title>Index of",
+        "Parent Directory", "Name", "Size"
     ]
     headers = {'User-Agent': 'WaybackLister/2.0'}
     for proto in ("http", "https"):
         url = f"{proto}://{domain}{path}"
         try:
-            r = requests.get(url, headers=headers, timeout=5, allow_redirects=True)
-            if r.status_code == 200 and any(p in r.text for p in patterns):
+            r = requests.get(url, headers=headers, timeout=7, allow_redirects=True)
+            if r.status_code == 200 and any(p.lower() in r.text.lower() for p in patterns):
                 return url
-        except:
-            pass
+        except requests.RequestException:
+            continue
     return None
 
 def process_domain(domain, paths, threads):
