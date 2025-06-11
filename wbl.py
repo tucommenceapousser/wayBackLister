@@ -77,7 +77,7 @@ def extract_subdomains_wayback(temp_path, domain):
 
 def get_subevil_subdomains(domain, port_scan=None):
     print(f"[+] Running SubEvil on {domain}...")
-    cmd = ["python3", "SubEvil.py", "-d", domain, "-ra"]
+    cmd = ["python3", "SubEvil.py", "-d", domain]
     if port_scan:
         cmd += ["-p", ",".join(str(p) for p in port_scan)]
     try:
